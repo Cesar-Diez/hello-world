@@ -1,0 +1,229 @@
+---
+title: "BHG Project"
+author: "Cesar Diez"
+date: "11/24/2020"  
+output:
+  pdf_document: 
+    latex_engine: xelatex  
+---
+   
+
+```{r, include=FALSE}
+options(tinytex.verbose = TRUE)
+```
+
+```{r setup, include=FALSE}
+library(skimr)
+library(naniar)
+library(glmnet)  
+library(corrplot)
+library(janitor)
+library(epiDisplay)
+library(margins)
+library(dplyr)
+library(tinytex)
+library(lubridate)
+library(ggplot2)
+```
+# Data Gathering
+
+```{r}
+BHG_Data1 = read.csv("BI Test Data copy.csv")
+```
+
+
+# Exploratory Data Analysis
+
+```{r eval = F}
+summary(BHG_Data1)
+str(BHG_Data1)
+skim(BHG_Data1)
+```
+
+In the EDA, we can see critical descriptive statistics metrics and measures of spread on some of the most important variables. For example, average income of 204,732, average FICO score of 718 and the mean approved amount given to clients at 80,369. In addition, we have a better understanding of the data set by looking at variable types (numeric and categorical) which are going to be significant to understand later in the analysis. Finally, there is a substantial amount of null values that needs to be addressed before conducting a deeper analysis of the data. 
+
+
+# Null Values 
+
+```{r eval = F}
+BHG_Data1 %>%
+filter(Funded == "NULL") # Too many Null values
+
+BHG_Data1 = BHG_Data1 %>% 
+  filter(!(Grade =='n/a')) # 551 n/as in grade 
+
+# Data Without Null values for Future Analysis
+BHG_data_No_Nulls = BHG_Data1  %>%
+  filter(!(Funded == "NULL"))
+```
+After conducting a simple command, we clearly see there is a substantial amount of Null values for the variable Funded. To be more precise, there are 64,255 NULL values for Funded, which corresponds to 56% of the data. Moreover, these NULL values are not random, they are in fact present in the variables Term and Rate in the exact same instances. These tree variables are important for any loan analysis, but having so many NULL values could make an analysis of this variables inaccurate. 
+
+\pagebreak
+# Data Cleaning and Manipulation 
+
+```{r warning=F, message=FALSE}
+BHG_Data1 = BHG_Data1 %>%
+  dplyr::select(-c(Gender, StatusOfEmployment, PriorYearIncome, PreviousYearDTI, X)) %>% 
+    filter(!(Income == 0.00)) %>% 
+       mutate(Approved_Rate = Approved / Requested) %>%  
+       mutate(Income = round(Income)) %>% 
+       mutate(FICO = as.numeric(FICO)) %>% 
+       filter(!(Type == 'NULL')) %>%
+       filter(!(SourceOfIncome == 'NULL')) %>%
+       mutate(Approved_or_not = ifelse(Approved > 0, '1', '0')) %>%
+       filter(!(BusinessAge == 27000)) %>%
+       mutate(BusinessAge = replace(BusinessAge, BusinessAge <0, NA)) %>% 
+       mutate(Approved_or_not = as.numeric(Approved_or_not)) 
+
+# In case the team desires to see the cleaned data  
+# write.csv(BHG_Data1, 'BI_Cleaned_Data.csv')
+```
+
+During the data cleaning, I excluded the variables Gender, StatusOfEmployment, PriorYearIncome, PreviousYearDTI, X, because they did not seem useful for my analysis. The variable Income, presented some 0 values which did not make sence to me, and therefore those values were eliminated; causing other values in the FICO variable to become normal. In addition, I created a variable Approved_Rate to better understand the approval rate that the company would give to clients. Lastly, I deleted some outliers in variables like BusinessAge, and executed 
+a few variable type conversions.   
+
+\pagebreak
+# Understanding the Data    
+
+## Numeric Variables - Normality 
+
+```{r warning=F, message=FALSE}
+par(mfrow=c(2,2))
+options(scipen=999)
+
+ggplot(BHG_Data1, aes(x = FICO)) + geom_histogram(binwidth =10
+,color = 'darkblue', fill = 'lightblue') + 
+ggtitle('Histogram FICO')
+
+ggplot(BHG_Data1, aes(x = Debt)) + geom_histogram(color = 'darkblue', fill = 'lightgreen') + ggtitle('Histogram Debt')
+
+hist(BHG_Data1$Approved, main ='Histogram Approved', col = 'blue')
+
+hist(BHG_Data1$Income, breaks = 100, xlim = c(-500000, 1000000)
+, main = ' Histogram Income', col = 'black')
+
+boxplot(BHG_Data1$FICO, main = 'FICO Boxplot')  
+```
+To understand the nature of the numeric variables, I tested normality for the variables above. 
+
+* FICO followed an almost perfect normal distribution, and therefore is a good variable to analyze. 
+* Approved was skewed to the right, suggesting there is group of clients getting high amounts in comparison to most other clients. 
+* Income was an interesting variable with extremely wide ranges, from -11,240,511 to 16,172,910; yet after minimizing those ranges the variable followed a fairly normal distribution. 
+* Debt was heavily skewed to the right, meaning there is a minority group of clients with extensive debt amounts, yet the majority of clients do not have such debt levels. 
+
+
+\pagebreak
+
+# Numeric Variables - Correlations
+
+```{r}
+BHG_Cor = BHG_Data1 %>%
+  dplyr::select(Income, Approved, Requested, Debt, Approved_Rate)
+c= cor(BHG_Cor)
+corrplot(c)
+```
+
+
+To further analyze numeric variables, I implemented a Correlation Plot to see if there were any alarming correlations. Most variables were positively correlated. For instance, a higher income results in higher debt, and a higher approved amount results in a large income. The only negatively correlated variables were Approved rate and requested. This could mean that there were some clients who requested X amount for a loan, yet were Approved more of what they asked for. Perhaps this could be a line of credit were the client needed more capital. 
+
+
+\pagebreak
+
+# Categorical Variables 
+
+```{r}
+#par(mfrow=c(2,2))
+tab1(BHG_Data1$SourceOfIncome, sort.group = "decreasing", cum.percent = 
+       TRUE, main = 'Distribution of Source of Income')
+tab1(BHG_Data1$Grade, sort.group = "decreasing", cum.percent = 
+       TRUE, main = 'Distribution of Grade')
+tab1(BHG_Data1$Type, sort.group = "decreasing", cum.percent = 
+       TRUE, main = 'Distribution Type')
+tab1(BHG_Data1$ApprovedCount, sort.group = "decreasing", cum.percent = 
+       TRUE, main = 'Distribution of Approved Count')
+tab1(BHG_Data1$Marketing, sort.group = "decreasing", cum.percent = 
+       TRUE, main = 'Distribution Marketing')
+```
+Categorical variables are easily understood with counts, and bars enable us to examine them efficiently. 
+
+* SourceOfIncome - The most common source of income came from employees' salaries, with an overwhelming majority of 69%. Income from owners came second with 17% and the remaining distributed between Contracts and Partners. 
+* Grade - Loans graded with a B or a C were the most commons grades for loans in the data set, contributing 29% and 25% respectively. E graded loans were more common than D loans by a small margin and A and F loans were understandably the less common ones. 
+* Type - A significant amount of all loans were Business loans, with an 82% of all types in the data set. the remaining were personal loans. 
+* ApprovedCount - 73.6% of total loans were approved by the company; whereas 26.4% were rejected. This is a conservative number for an Loan Approval rate having in mind that the loans are the assets of the company. The 73% is a healthy number for the business because they are neither rejecting extensively nor approving to everybody. 
+* Marketing - 86.3% of the loans were marketed via traditional measures. It is not clear what traditional actually means, but we can conclude there is room for improvement in more Digital Marketing. 
+
+
+\pagebreak
+## Data Analysis 
+
+```{r eval = F}
+Reg = lm(Approved ~ FICO + Grade + Income + Type + BusinessAge + Marketing, BHG_Data1)
+summary(Reg)
+
+Reg2 = lm(Approved_Rate ~ FICO + Grade + Income + Type + BusinessAge + Marketing, BHG_Data1)
+summary(Reg2)
+
+Reg_Grade = glm(ApprovedCount ~ Grade, BHG_Data1, family = "binomial")
+summary(Reg_Grade)
+
+Reg_FICO= glm(ApprovedCount ~ FICO, BHG_Data1, family = "binomial") 
+summary(Reg_FICO)
+
+FinalReg = glm(ApprovedCount ~ Grade + SourceOfIncome + Type + Marketing, 
+               data = BHG_Data1, family = "binomial")
+summary(FinalReg)
+```
+
+To begin the analysis, I conducted a linear model having Approved as the predictive variable. This was done with the purpose of identifying which variables predicted the most of Approved. All variables were significant, and the R Squared of the model was 39%, meaning that the model explains 39% of the variation in Approved. This is not an exceptional R Squared as a general rule, but it is unknown what a typical R squared is in this type of loan analysis.
+Additionally, I also did a regression with Approved_Rate as a predictive variable and found similar results; however, in this case business age and type were not significant. The R squared of the model was approximately 5%, which is a low R squared for a model. 
+
+Subsequently, I performed three logistic regressions to predict ApprovedCount (a binary variable). This was analyzed in order to see whether FICO or Grade were better predictors for ApprovedCount. The logistic model with Grade resulted in a lower AIC (Error) suggesting that Grade is in fact a better predictor for ApprovedCount. In other words, the loan grade would be more impactful in deciding whether to approve or reject a client for a loan service. 
+
+Finally, after trying different variables in the model, I found the combination of variables that minimizes the AIC error the most, and are therefore the best explanatory variables for approved count. All variables were significant and the AIC decreased significantly from the previous logistic models. 
+
+
+\pagebreak
+
+## Predictions and Machine Learning 
+
+```{r}
+set.seed(1)
+BHGT = sample(nrow(BHG_Data1), size = nrow(BHG_Data1) *.7) 
+test = -BHGT
+BHG_Train = BHG_Data1[BHGT, ]
+BHG_test = BHG_Data1[test, ]
+
+FinalRegTes = glm(ApprovedCount ~ Grade + SourceOfIncome + 
+Type + Marketing, data = BHG_Train, family = "binomial")
+
+glm_prob = predict(FinalRegTes,BHG_test , type = 'response')
+glm_prob[1:5] # Probability of approval of the first 5 rows 
+
+logistic_pred <- ifelse(glm_prob > 0.5, 1, 0)
+logistic_pred[1:5] 
+
+# Performance of the model 
+confmat1<-table(logistic_pred, BHG_test$ApprovedCount)
+confmat1
+
+Accuracy <-mean(logistic_pred==BHG_test$ApprovedCount)
+print(paste('Accuracy =',Accuracy))  
+
+# Average Probability of Approval in test data 
+ y = mean(glm_prob) 
+ print(paste('Average Probability of Approval =',y))
+```
+To examine the performance of the best logistic model, I split the data into training and test sets. The training set accounts for a random sample of 70% of the original data, and the test set the remaining of the data. To see the accuracy of the model, I fitted the model with the training data and then did predictions with the testing data. Subsequently, I compared the predictions with the actual values of ApprovedCount in the data to see the accuracy value, which in this case was 75.18%. Finally, I calculated the Average probability of approval according to the training set to be 73%. 
+
+
+## Aditional Insights 
+
+```{r}
+#Margins Package 
+cplot(glm(ApprovedCount ~ Grade, BHG_Data1, family = "binomial"))
+cplot(glm(ApprovedCount ~ FICO, BHG_Data1, family = "binomial"))
+```
+These two plots display the relationship between FICO and Grade when compared to ApprovedCount. Intuitively, an increase in FICO score results in a higher probability of approval, and the same can be said for Grade; the higher the grade, the higher the probability of Approval.  
+
+Please refer to the tableau file, for more visualizations and data analysis. 
+
