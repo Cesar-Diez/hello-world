@@ -40,7 +40,7 @@ str(BHG_Data1)
 skim(BHG_Data1)
 ```
 
-In the EDA, we can see critical descriptive statistics metrics and measures of spread on some of the most important variables. For example, average income of 204,732, average FICO score of 718 and the mean approved amount given to clients at 80,369. In addition, we have a better understanding of the data set by looking at variable types (numeric and categorical) which are going to be significant to understand later in the analysis. Finally, there is a substantial amount of null values that needs to be addressed before conducting a deeper analysis of the data. 
+In the EDA, we can see critical descriptive statistics metrics and measures of spread on some of the most important variables. For example, average income of 204,732, average FICO score of 718 and the mean approved amount given to clients at 80,369. In addition, we have a better understanding of the data set by looking at variable types (numeric and categorical) which are going to be significant to understand later in the analysis. Finally, there is a substantial amount of null values that needs to be addressed before conducting a deeper analysis of the data 
 
 
 # Null Values 
